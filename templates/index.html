@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SmartCart | Automated Billing</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6fb;color:#172033;font-family:Arial,sans-serif}
+header{background:#101d36;color:white;padding:22px 5%;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:24px}header span{color:#9fb5d9;font-size:13px}
+main{max-width:1100px;margin:28px auto;padding:0 18px}.grid{display:grid;grid-template-columns:1.4fr .8fr;gap:20px}
+.card{background:white;border-radius:15px;padding:22px;box-shadow:0 5px 22px #14213d0c;margin-bottom:18px}
+h2{font-size:18px;margin:0 0 16px}.muted{color:#718096;font-size:13px}
+input{padding:12px;border:1px solid #d8dfeb;border-radius:8px;width:100%;font-size:15px}
+button{border:0;border-radius:8px;padding:11px 15px;background:#2563eb;color:white;font-weight:600;cursor:pointer}
+button.secondary{background:#e9eef8;color:#24344f}button.danger{background:#dc3545}
+.scan{display:flex;gap:9px}.scan input{flex:1}
+table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:12px 7px;border-bottom:1px solid #edf0f5;font-size:14px}
+th{color:#718096;font-size:12px}.total{font-size:28px;font-weight:700;color:#1456c0}
+.notice{padding:12px;border-radius:8px;background:#eff6ff;color:#1d4ed8;margin-top:12px;font-size:13px}
+#message{margin:12px 0;font-size:13px;min-height:18px}.actions{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:760px){.grid{grid-template-columns:1fr}header{display:block}header span{display:block;margin-top:7px}}
+</style></head><body>
+<header><div><h1>🛒 SmartCart</h1><span>IoT-powered automated shopping and billing prototype</span></div><span>RFID • OpenCV-ready • Flask</span></header>
+<main><div class="grid"><section>
+<div class="card"><h2>Scan product RFID</h2>
+<div class="scan"><input id="uid" placeholder="Enter RFID UID (e.g. 8901001)"><button onclick="scanTag()">Add item</button></div>
+<div class="notice">Hardware mode: connect the Arduino and use its Serial Monitor to read UIDs. Enter the UID here for this software demo.</div><div id="message"></div></div>
+<div class="card"><h2>Shopping cart</h2><table><thead><tr><th>Product</th><th>Price</th><th>Qty</th><th></th></tr></thead><tbody id="cart"><tr><td colspan="4" class="muted">Your cart is empty.</td></tr></tbody></table>
+<div class="actions" style="margin-top:16px"><button class="secondary" onclick="clearCart()">Clear cart</button><button onclick="checkout()">Checkout & generate receipt</button></div></div>
+</section><aside>
+<div class="card"><h2>Bill summary</h2><div class="muted">Amount payable</div><div class="total" id="total">₹0.00</div><p class="muted">Taxes are not included in this academic prototype.</p></div>
+<div class="card"><h2>Registered products</h2><div id="products" class="muted">Loading...</div></div>
+<div class="card"><h2>Recent transactions</h2><div id="transactions" class="muted">No transactions yet.</div></div>
+</aside></div></main>
+<script>
+const money=n=>'₹'+Number(n).toFixed(2);
+async function api(url,method='GET',body=null){let o={method,headers:{'Content-Type':'application/json'}};if(body)o.body=JSON.stringify(body);let r=await fetch(url,o);let d=await r.json();if(!r.ok)throw new Error(d.message||'Request failed');return d}
+function msg(t,bad=false){let e=document.getElementById('message');e.textContent=t;e.style.color=bad?'#c62828':'#16803c'}
+async function refresh(){let d=await api('/api/cart');document.getElementById('total').textContent=money(d.total);
+let el=document.getElementById('cart');el.innerHTML=d.items.length?d.items.map(x=>`<tr><td>${x.name}<br><small class="muted">${x.rfid_uid}</small></td><td>${money(x.price)}</td><td>${x.quantity}</td><td><button class="danger" onclick="removeItem('${x.rfid_uid}')">−</button></td></tr>`).join(''):'<tr><td colspan="4" class="muted">Your cart is empty.</td></tr>'}
+async function scanTag(){let uid=document.getElementById('uid').value.trim();try{let d=await api('/api/scan','POST',{uid});msg(d.message);document.getElementById('uid').value='';refresh()}catch(e){msg(e.message,true)}}
+async function removeItem(uid){await api('/api/remove','POST',{uid});refresh()}
+async function clearCart(){await api('/api/clear','POST',{});msg('Cart cleared');refresh()}
+async function checkout(){try{let d=await api('/api/checkout','POST',{});let receipt=`SMARTCART RECEIPT\nTransaction: ${d.transaction_id}\nDate: ${d.created_at}\n\n`+d.items.map(x=>`${x.name} x${x.quantity} = ${money(x.price*x.quantity)}`).join('\n')+`\n\nTOTAL: ${money(d.total)}`;let w=window.open('','_blank');w.document.write('<pre style="font:16px monospace;padding:25px">'+receipt.replaceAll('<','&lt;')+'</pre>');msg('Checkout successful: '+d.transaction_id);refresh();loadTransactions()}catch(e){msg(e.message,true)}}
+async function loadProducts(){let p=await api('/api/products');document.getElementById('products').innerHTML=p.map(x=>`${x.name} — ${money(x.price)} <small>(${x.rfid_uid})</small>`).join('<br>')}
+async function loadTransactions(){let t=await api('/api/transactions');document.getElementById('transactions').innerHTML=t.length?t.map(x=>`${x.id} — ${money(x.total)}<br><small>${x.created_at}</small>`).join('<hr>'):'No transactions yet.'}
+document.getElementById('uid').addEventListener('keydown',e=>{if(e.key==='Enter')scanTag()});
+refresh();loadProducts();loadTransactions();
+</script></body></html>
